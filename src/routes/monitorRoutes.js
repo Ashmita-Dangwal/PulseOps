@@ -5,6 +5,7 @@ import {
   createMonitor,
   getMonitors,
   getMonitorById,
+  getMonitorChecks,
   updateMonitor,
   deleteMonitor,
   pauseMonitor,
@@ -88,6 +89,7 @@ router.post("/", createMonitor);
  *       200:
  *         description: Monitor retrieved successfully
  */
+router.get("/:id/checks", getMonitorChecks);
 router.get("/:id", getMonitorById);
 
 /**

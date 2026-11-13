@@ -1,12 +1,13 @@
 {
-  "name": "backend",
+  "name": "pulseops",
   "version": "1.0.0",
-  "description": "",
+  "description": "Full-stack uptime monitoring platform",
   "main": "src/server.js",
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "check": "node scripts/check-syntax.js"
   },
   "keywords": [],
   "author": "",
@@ -39,5 +40,8 @@
   "overrides": {
     "glob": "^14.0.3",
     "minimatch": "^11.0.4"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

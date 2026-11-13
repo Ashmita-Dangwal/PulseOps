@@ -9,28 +9,22 @@ import errorMiddleware from "./middleware/errorMiddleware.js";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
-
-const app = express();
-
-// Middleware
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
+import incidentRoutes from "./routes/incidentRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
+import {requireAuth} from "./middleware/authMiddleware.js";
+const app=express();
+app.use(helmet({crossOriginResourcePolicy:{policy:"cross-origin"}}));
+app.use(cors({origin:(process.env.CORS_ORIGIN||"http://localhost:5173").split(",").map(x=>x.trim()),credentials:true}));
+app.use(express.json({limit:"1mb"}));
 app.use(morgan("dev"));
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// Routes
-app.use("/api/health", healthRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/monitors", monitorRoutes);
-app.use("/api/analytics", analyticsRoutes);
-
-// Basic test route
-app.get("/", (req, res) => {
-  res.status(200).json({
-    message: "PulseOps Backend is running!"
-  });
-});
-
+app.use("/api-docs",swaggerUi.serve,swaggerUi.setup(swaggerSpec));
+app.use("/api/health",healthRoutes);
+app.use("/api/auth",authRoutes);
+app.use("/api/projects",requireAuth,projectRoutes);
+app.use("/api/monitors",requireAuth,monitorRoutes);
+app.use("/api/analytics",requireAuth,analyticsRoutes);
+app.use("/api/incidents",requireAuth,incidentRoutes);
+app.get("/",(req,res)=>res.json({message:"PulseOps Backend is running!",docs:"/api-docs"}));
+app.use((req,res)=>res.status(404).json({success:false,message:"Route not found"}));
 app.use(errorMiddleware);
 export default app;

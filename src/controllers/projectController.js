@@ -1,165 +1,73 @@
-
+import mongoose from "mongoose";
 import { z } from "zod";
+import Project from "../models/Project.js";
+import Monitor from "../models/Monitor.js";
+import CheckResult from "../models/CheckResult.js";
+import Incident from "../models/Incident.js";
+import { removeMonitorSchedule } from "../services/monitorScheduler.js";
 
-// Validation rules for creating a project
 const projectSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Project name is required")
-    .max(100, "Project name cannot exceed 100 characters"),
-
-  description: z
-    .string()
-    .trim()
-    .max(500, "Description cannot exceed 500 characters")
-    .optional()
-    .default("")
+  name: z.string().trim().min(1).max(100),
+  description: z.string().trim().max(500).optional().default("")
 }).strict();
-
-// Validation rules for updating a project
 const updateProjectSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Project name cannot be empty")
-    .max(100, "Project name cannot exceed 100 characters")
-    .optional(),
+  name: z.string().trim().min(1).max(100).optional(),
+  description: z.string().trim().max(500).optional()
+}).strict().refine((data) => Object.keys(data).length > 0, "At least one field is required for an update");
+const isValidId = (id) => mongoose.isValidObjectId(id);
+const ownerId = (req) => req.user?.id || req.user?._id || null;
+const ownerFilter = (req) => ownerId(req) ? { userId: ownerId(req) } : {};
 
-  description: z
-    .string()
-    .trim()
-    .max(500, "Description cannot exceed 500 characters")
-    .optional()
-}).strict().refine(
-  (data) => Object.keys(data).length > 0,
-  "At least one field is required for an update"
-);
-
-// Project ID validation
-const projectIdSchema = z.string().trim().min(1, "Project ID is required");
-
-// Create project
 export const createProject = async (req, res, next) => {
   try {
-    const validatedData = projectSchema.safeParse(req.body);
-
-    if (!validatedData.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid project details",
-        errors: validatedData.error.issues
-      });
-    }
-
-    return res.status(201).json({
-      success: true,
-      message: "Project details validated successfully",
-      data: validatedData.data
-    });
-  } catch (error) {
-    return next(error);
-  }
+    const parsed = projectSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ success: false, message: "Invalid project details", errors: parsed.error.issues });
+    const project = await Project.create({ ...parsed.data, userId: ownerId(req) });
+    return res.status(201).json({ success: true, message: "Project created successfully", data: project });
+  } catch (error) { return next(error); }
 };
 
-// Get all projects
 export const getProjects = async (req, res, next) => {
   try {
-    const projects = [];
-
-    return res.status(200).json({
-      success: true,
-      message: "Projects retrieved successfully",
-      count: projects.length,
-      data: projects
-    });
-  } catch (error) {
-    return next(error);
-  }
+    const projects = await Project.find(ownerFilter(req)).sort({ createdAt: -1 }).lean();
+    return res.status(200).json({ success: true, message: "Projects retrieved successfully", count: projects.length, data: projects });
+  } catch (error) { return next(error); }
 };
 
-// Get project by ID
 export const getProjectById = async (req, res, next) => {
   try {
-    const validatedId = projectIdSchema.safeParse(req.params.id);
-
-    if (!validatedId.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid project ID",
-        errors: validatedId.error.issues
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Project ID received successfully",
-      data: {
-        id: validatedId.data
-      }
-    });
-  } catch (error) {
-    return next(error);
-  }
+    if (!isValidId(req.params.id)) return res.status(400).json({ success: false, message: "Invalid project ID" });
+    const project = await Project.findOne({ _id: req.params.id, ...ownerFilter(req) }).lean();
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+    return res.status(200).json({ success: true, message: "Project retrieved successfully", data: project });
+  } catch (error) { return next(error); }
 };
 
-// Update project
 export const updateProject = async (req, res, next) => {
   try {
-    const validatedId = projectIdSchema.safeParse(req.params.id);
-
-    if (!validatedId.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid project ID",
-        errors: validatedId.error.issues
-      });
-    }
-
-    const validatedData = updateProjectSchema.safeParse(req.body);
-
-    if (!validatedData.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid project details",
-        errors: validatedData.error.issues
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Project details validated for update",
-      data: {
-        id: validatedId.data,
-        ...validatedData.data
-      }
-    });
-  } catch (error) {
-    return next(error);
-  }
+    if (!isValidId(req.params.id)) return res.status(400).json({ success: false, message: "Invalid project ID" });
+    const parsed = updateProjectSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ success: false, message: "Invalid project details", errors: parsed.error.issues });
+    const project = await Project.findOneAndUpdate({ _id: req.params.id, ...ownerFilter(req) }, { $set: parsed.data }, { new: true, runValidators: true });
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+    return res.status(200).json({ success: true, message: "Project updated successfully", data: project });
+  } catch (error) { return next(error); }
 };
 
-// Delete project
 export const deleteProject = async (req, res, next) => {
   try {
-    const validatedId = projectIdSchema.safeParse(req.params.id);
-
-    if (!validatedId.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid project ID",
-        errors: validatedId.error.issues
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Project deletion request received",
-      data: {
-        id: validatedId.data
-      }
-    });
-  } catch (error) {
-    return next(error);
-  }
+    if (!isValidId(req.params.id)) return res.status(400).json({ success: false, message: "Invalid project ID" });
+    const project = await Project.findOne({ _id: req.params.id, ...ownerFilter(req) });
+    if (!project) return res.status(404).json({ success: false, message: "Project not found" });
+    const monitors = await Monitor.find({ projectId: project._id }).select("_id");
+    const monitorIds = monitors.map((monitor) => monitor._id);
+    await Promise.all(monitorIds.map((id) => removeMonitorSchedule(id.toString())));
+    await Promise.all([
+      CheckResult.deleteMany({ monitorId: { $in: monitorIds } }),
+      Incident.deleteMany({ monitorId: { $in: monitorIds } }),
+      Monitor.deleteMany({ projectId: project._id })
+    ]);
+    await project.deleteOne();
+    return res.status(200).json({ success: true, message: "Project and associated monitoring data deleted", data: { id: req.params.id, deletedMonitors: monitorIds.length } });
+  } catch (error) { return next(error); }
 };
